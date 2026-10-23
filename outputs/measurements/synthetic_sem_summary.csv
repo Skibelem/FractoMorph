@@ -1,2 +1,2 @@
 Total_Regions,Void_Count,Surface_Count,Mixed_Count,Image_Area_px,Image_Area_um2,AF_Void,AF_Surface,AF_Mixed,Void_Number_Density_per_um2,Scale_um_per_px
-62,4,37,21,252852,10114.08,0.07222,0.445739,0.482041,0.00039549,0.2
+62,0,37,25,252852,252852.0,0.0,0.445739,0.554261,0.0,1.0

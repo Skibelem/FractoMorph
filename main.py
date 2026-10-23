@@ -2,8 +2,8 @@
 """
 CAMMP-SFSE: SEM Fractograph Segmentation Engine
 
-Command-line interface for automated segmentation of SEM fractographs
-into Void, Surface, and Mixed regions.
+User-friendly interface for automated segmentation of SEM fractographs
+into Void, Surface, and Mixed regions. Can be executed from VS Code or CLI.
 
 Author: Adelugba Joel Oluwaseyi
 """
@@ -117,7 +117,6 @@ def generate_synthetic_sem(output_path: str = "data/sample/synthetic_sem.png",
 
     # --- Add a large multi-dimple region (needs refinement) ---
     large_cx, large_cy = width // 3, height // 3
-    large_r = 60
 
     for offset in [(-20, -20), (20, -15), (0, 25), (-25, 15), (20, 20)]:
         cx = large_cx + offset[0]
@@ -205,7 +204,7 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     void_ratio : float
         Void fraction threshold for Void vs Mixed classification.
     """
-    from src.image_io import load_image, to_grayscale_uint8, crop_banner, save_image
+    from src.image_io import load_image, to_grayscale_uint8, crop_banner
     from src.preprocessing import preprocess
     from src.contour_detection import detect_contours
     from src.contour_refinement import refine_contours
@@ -214,6 +213,7 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     from src.quantification import (compute_region_morphometrics,
                                      compute_summary_metrics, export_csv)
     from src.visualization import (create_pipeline_figure,
+                                    create_side_by_side_figure,
                                     save_classification_mask,
                                     save_skeleton_overlay,
                                     save_binary_mask)
@@ -317,7 +317,12 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
         voids["void_seeds"], voids["void_extended"],
         class_mask, df_regions, pipeline_fig
     )
-    print(f"  Pipeline figure: {pipeline_fig}")
+    print(f"  Diagnostic figure: {pipeline_fig}")
+
+    # Side-by-side comparison figure
+    side_by_side_fig = os.path.join(fig_dir, f"{image_name}_side_by_side.png")
+    create_side_by_side_figure(gray, class_mask, side_by_side_fig)
+    print(f"  Side-by-side figure: {side_by_side_fig}")
 
     # Contours to outputs/contours/
     init_contour_path = os.path.join(contour_dir, f"{image_name}_initial_contours.png")
@@ -351,8 +356,108 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     print(f"{'='*60}\n")
 
 
+def interactive_mode():
+    """Interactive console prompt for running CAMMP-SFSE directly from VS Code."""
+    print("\n" + "=" * 65)
+    print("  CAMMP-SFSE: SEM Fractograph Segmentation Engine")
+    print("  Interactive Mode (VS Code / Terminal)")
+    print("=" * 65)
+
+    # Discover available images in data/sample and data/raw
+    sample_images = []
+    if os.path.isdir("data/sample"):
+        sample_images = [str(p) for p in sorted(Path("data/sample").glob("*.*"))
+                         if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff"}]
+
+    raw_images = []
+    if os.path.isdir("data/raw"):
+        raw_images = [str(p) for p in sorted(Path("data/raw").glob("*.*"))
+                      if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".tif", ".tiff"}]
+
+    print("\nSelect an SEM image or batch processing option:")
+    menu_items = []
+    idx = 1
+
+    if sample_images:
+        for p in sample_images:
+            menu_items.append((str(idx), f"Sample: {Path(p).name}", p))
+            idx += 1
+
+    if raw_images:
+        for p in raw_images:
+            menu_items.append((str(idx), f"Real SEM: {Path(p).name}", p))
+            idx += 1
+        menu_items.append((str(idx), "Batch process ALL images in data/raw/", "data/raw/"))
+        idx += 1
+
+    menu_items.append((str(idx), "Generate a new synthetic SEM test image", "GENERATE_SAMPLE"))
+    idx += 1
+    menu_items.append((str(idx), "Enter custom file or folder path...", "CUSTOM"))
+
+    for key, desc, _ in menu_items:
+        print(f"  [{key}] {desc}")
+
+    choice = input(f"\nEnter choice [1-{len(menu_items)}, default 1]: ").strip() or "1"
+    selected = next((item for item in menu_items if item[0] == choice), menu_items[0])
+    selected_target = selected[2]
+
+    if selected_target == "GENERATE_SAMPLE":
+        target_path = generate_synthetic_sem("data/sample/synthetic_sem.png")
+        proceed = input("\nProcess this generated sample now? [Y/n]: ").strip().lower()
+        if proceed in {"n", "no"}:
+            return
+        input_path = target_path
+    elif selected_target == "CUSTOM":
+        input_path = input("Enter path to SEM image or folder: ").strip()
+        while not os.path.exists(input_path):
+            print(f"  Error: Path does not exist: {input_path}")
+            input_path = input("  Enter valid path to SEM image or folder (or 'q' to quit): ").strip()
+            if input_path.lower() == 'q':
+                return
+    else:
+        input_path = selected_target
+
+    print("\n--- Pipeline Parameters (Press Enter to accept defaults) ---")
+    scale_in = input("Spatial calibration scale in um/px [default 1.0]: ").strip()
+    scale = float(scale_in) if scale_in else 1.0
+
+    crop_in = input("Crop banner height in px (0 for none) [default 0]: ").strip()
+    crop_banner = int(crop_in) if crop_in else 0
+
+    min_area_in = input("Minimum region area in px (noise filter) [default 25]: ").strip()
+    min_area = int(min_area_in) if min_area_in else 25
+
+    void_ratio_in = input("Void fraction threshold tau_void [default 0.50]: ").strip()
+    void_ratio = float(void_ratio_in) if void_ratio_in else 0.50
+
+    output_in = input("Output directory path [default outputs/]: ").strip()
+    output_dir = output_in if output_in else "outputs/"
+
+    from src.image_io import collect_image_paths
+    image_paths = collect_image_paths(input_path)
+    print(f"\n[CAMMP-SFSE] Found {len(image_paths)} image(s) to process.")
+
+    for img_path in image_paths:
+        process_image(
+            input_path=img_path,
+            output_dir=output_dir,
+            scale=scale,
+            crop_banner_px=crop_banner,
+            min_area=min_area,
+            void_ratio=void_ratio,
+        )
+
+    print("[CAMMP-SFSE] All processing complete!")
+    print(f"Results exported to: {os.path.abspath(output_dir)}")
+
+
 def main():
-    """CLI entry point."""
+    """Application entry point with support for both CLI and Interactive VS Code execution."""
+    if len(sys.argv) == 1:
+        # User ran `python main.py` or clicked 'Run' in VS Code without arguments
+        interactive_mode()
+        return
+
     parser = argparse.ArgumentParser(
         description="CAMMP-SFSE: Automated SEM Fractograph Segmentation Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -393,8 +498,16 @@ Examples:
         "--generate-sample", action="store_true",
         help="Generate a synthetic SEM test image in data/sample/."
     )
+    parser.add_argument(
+        "--interactive", action="store_true",
+        help="Launch interactive mode to select images and adjust parameters."
+    )
 
     args = parser.parse_args()
+
+    if args.interactive:
+        interactive_mode()
+        return
 
     if args.generate_sample:
         generate_synthetic_sem("data/sample/synthetic_sem.png")
@@ -403,7 +516,7 @@ Examples:
             return
 
     if args.input is None:
-        parser.error("--input is required (or use --generate-sample).")
+        parser.error("--input is required (or use --generate-sample / --interactive).")
 
     from src.image_io import collect_image_paths
 

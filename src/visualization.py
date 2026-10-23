@@ -1,8 +1,8 @@
 """
 CAMMP-SFSE: Visualization Module
 
-Generate the 6-panel publication-quality diagnostic figure (_pipeline.png)
-and color-coded region masks.
+Generate the 6-panel publication-quality diagnostic figure (_pipeline.png),
+color-coded region masks, and side-by-side comparison figures.
 """
 
 import os
@@ -135,6 +135,65 @@ def create_pipeline_figure(gray: np.ndarray,
     return os.path.abspath(output_path)
 
 
+def create_side_by_side_figure(gray: np.ndarray,
+                               classification_mask: np.ndarray,
+                               output_path: str,
+                               title: str = "CAMMP-SFSE: Original SEM vs. Segmented Regions",
+                               dpi: int = 150) -> str:
+    """Generate a clean side-by-side comparison figure.
+
+    Displays the original SEM image on the left and the segmented/classified
+    regions mask on the right with an explicit legend.
+
+    Parameters
+    ----------
+    gray : np.ndarray
+        Original 2D uint8 grayscale SEM image.
+    classification_mask : np.ndarray
+        3-channel RGB classification mask (Void=Red, Mixed=Yellow, Surface=Blue).
+    output_path : str
+        Path where the side-by-side figure is saved.
+    title : str
+        Figure super title.
+    dpi : int
+        Figure resolution.
+
+    Returns
+    -------
+    str
+        Absolute path to the saved figure.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    fig.suptitle(title, fontsize=15, fontweight="bold")
+
+    # Left: Original SEM Image
+    axes[0].imshow(gray, cmap="gray", vmin=0, vmax=255)
+    axes[0].set_title("(a) Original SEM Image", fontsize=12, fontweight="semibold")
+    axes[0].axis("off")
+
+    # Right: Segmented & Classified Regions
+    axes[1].imshow(classification_mask)
+    axes[1].set_title("(b) Segmented & Classified Regions", fontsize=12, fontweight="semibold")
+    axes[1].axis("off")
+
+    # Legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor="red", edgecolor="black", label="Void (Dimple Floor)"),
+        Patch(facecolor="yellow", edgecolor="black", label="Mixed (Partial Void)"),
+        Patch(facecolor="blue", edgecolor="black", label="Surface (Flat/Ductile)"),
+        Patch(facecolor="white", edgecolor="black", label="Tear-Ridge Boundary"),
+    ]
+    axes[1].legend(handles=legend_elements, loc="lower right", fontsize=10, framealpha=0.9)
+
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+    return os.path.abspath(output_path)
+
+
 def save_classification_mask(classification_mask: np.ndarray,
                              output_path: str) -> str:
     """Save the color-coded classification mask as an image.
@@ -202,4 +261,3 @@ def save_binary_mask(mask: np.ndarray, output_path: str) -> str:
     out = (mask > 0).astype(np.uint8) * 255
     cv2.imwrite(output_path, out)
     return os.path.abspath(output_path)
-

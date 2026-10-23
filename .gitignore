@@ -1,4 +1,4 @@
-﻿# Python cache and virtual environments
+# Python cache and virtual environments
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -9,5 +9,6 @@ env/
 # OS and editor files
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .idea/
