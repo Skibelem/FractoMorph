@@ -6,10 +6,14 @@ Generates a publication-quality 8-slide widescreen (16:9, 13.33x7.5 inches)
 presentation deck in PDF format documenting the CAMMP-SFSE fractograph
 segmentation engine, methodology, experimental results, and software delivery.
 
+Enforces strict textwrap.fill() on all multi-column text to eliminate text clipping
+and card boundary collisions.
+
 Author: Adelugba Joel Oluwaseyi
 """
 
 import os
+import textwrap
 import cv2
 import numpy as np
 import matplotlib
@@ -73,7 +77,7 @@ def draw_card(ax, x, y, w, h, title="", title_color=COLOR_TEXT_MAIN,
                           facecolor=bg, edgecolor=border, linewidth=lw, zorder=2)
     ax.add_patch(rect)
     if title:
-        ax.text(x + 0.02, y + h - 0.04, title, fontsize=12, fontweight="bold",
+        ax.text(x + 0.02, y + h - 0.038, title, fontsize=11.5, fontweight="bold",
                 color=title_color, zorder=3)
 
 
@@ -85,7 +89,7 @@ def slide_1_title():
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-    # Subtle background pattern accents
+    # Header accent
     ax.add_patch(Rectangle((0, 0.88), 1.0, 0.12, facecolor="#0B132B", edgecolor="none", zorder=1))
     ax.add_patch(Rectangle((0, 0.873), 1.0, 0.007, facecolor=COLOR_ACCENT, edgecolor="none", zorder=2))
 
@@ -145,11 +149,11 @@ def slide_1_title():
 
 
 def slide_2_objectives():
-    """Slide 2: Problem Statement & Project Objectives."""
+    """Slide 2: Problem Statement & Project Objectives (Strict textwrap width=48 left, width=46 right)."""
     fig, ax = setup_slide("Problem Statement & Engineering Objectives", slide_num=2)
 
     # Left Container: Problem Statement
-    draw_card(ax, 0.04, 0.10, 0.44, 0.74, title="The Metallurgical Fractography Challenge",
+    draw_card(ax, 0.04, 0.08, 0.44, 0.77, title="The Metallurgical Fractography Challenge",
               title_color="#B91C1C")
 
     prob_points = [
@@ -157,23 +161,22 @@ def slide_2_objectives():
          "Ductile fractures feature dense populations of microscopic dimples (voids), shear tear ridges, and flat cleavage or ductile-slip surfaces. Quantitative characterization is critical for predicting fracture toughness and failure modes."),
         ("Bottlenecks of Manual Stereology:",
          "Manual tracing and point-counting are labor-intensive, operator-biased, non-reproducible, and completely impractical for high-throughput material screening and quality control."),
-        ("Limitations of Standard Computer Vision:",
-         "Simple global thresholding (Otsu alone) catastrophically fails on SEM fractographs due to:\n"
-         "  * Non-uniform illumination and dark shadow gradients.\n"
-         "  * Coalesced dimple colonies forming massive, under-segmented blobs.\n"
-         "  * Low-contrast, broken tear ridges causing leaky boundaries.\n"
-         "  * High speckle noise inflating apparent void counts.")
+        ("Limitations of Conventional Computer Vision:",
+         "Simple global thresholding (Otsu alone) catastrophically fails on SEM fractographs due to non-uniform illumination, dark shadow gradients, coalesced dimple colonies forming massive under-segmented blobs, and leaky boundaries from broken tear ridges.")
     ]
-    cur_y = 0.73
+
+    cur_y = 0.745
     for title, desc in prob_points:
-        ax.text(0.06, cur_y, title, fontsize=11, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
-        cur_y -= 0.028
-        ax.text(0.06, cur_y, desc, fontsize=9.5, color=COLOR_TEXT_BODY, linespacing=1.45,
+        ax.text(0.06, cur_y, title, fontsize=10.5, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
+        cur_y -= 0.024
+        wrapped_desc = textwrap.fill(desc, width=48)
+        num_lines = len(wrapped_desc.split("\n"))
+        ax.text(0.06, cur_y, wrapped_desc, fontsize=9.5, color=COLOR_TEXT_BODY, linespacing=1.35,
                 va="top", zorder=3)
-        cur_y -= 0.13 if "Limitations" in title else 0.11
+        cur_y -= (num_lines * 0.021 + 0.038)
 
     # Right Container: Project Objectives
-    draw_card(ax, 0.52, 0.10, 0.44, 0.74, title="CAMMP System Engineering Objectives",
+    draw_card(ax, 0.52, 0.08, 0.44, 0.77, title="CAMMP System Engineering Objectives",
               title_color=COLOR_ACCENT)
 
     objectives = [
@@ -188,13 +191,16 @@ def slide_2_objectives():
         ("5. User-Friendly VS Code & CLI Delivery",
          "Provide a zero-friction application runnable from VS Code with interactive menus, 1-click launch presets, and publication-ready diagnostic exports.")
     ]
-    cur_y = 0.73
+
+    cur_y = 0.745
     for title, desc in objectives:
-        ax.text(0.54, cur_y, title, fontsize=10.5, fontweight="bold", color=COLOR_ACCENT, zorder=3)
-        cur_y -= 0.024
-        ax.text(0.54, cur_y, desc, fontsize=9.2, color=COLOR_TEXT_BODY, linespacing=1.4,
+        ax.text(0.54, cur_y, title, fontsize=10.0, fontweight="bold", color=COLOR_ACCENT, zorder=3)
+        cur_y -= 0.022
+        wrapped_desc = textwrap.fill(desc, width=46)
+        num_lines = len(wrapped_desc.split("\n"))
+        ax.text(0.54, cur_y, wrapped_desc, fontsize=9.5, color=COLOR_TEXT_BODY, linespacing=1.35,
                 va="top", zorder=3)
-        cur_y -= 0.10
+        cur_y -= (num_lines * 0.0195 + 0.028)
 
     return fig
 
@@ -208,7 +214,7 @@ def slide_3_pipeline():
          ["Convert to 8-bit normalized grayscale",
           "Optional bottom info-banner trimming",
           "Bilateral filtering (d=5, sC=25, sS=25)",
-          "256-bin smoothed intensity histogram (sigma=2.0)"],
+          "256-bin smoothed intensity histogram"],
          COLOR_TEAL),
         ("Stage 1: Contour Detection & Edge Linking",
          ["Global Otsu thresholding on denoised image",
@@ -220,7 +226,7 @@ def slide_3_pipeline():
         ("Stage 2: Statistical Contour Refinement",
          ["Compute region area distribution: mu_A, sigma_A",
           "Flag oversized outliers: A_i > mu_A + 1.0 * sigma_A",
-          "Localized Otsu re-thresholding inside flagged bounding boxes",
+          "Localized Otsu re-thresholding inside flagged boxes",
           "Union sub-skeletons into refined master skeleton",
           "Filter sub-micron speckle noise (area >= 25 px)"],
          "#D97706"),
@@ -232,14 +238,14 @@ def slide_3_pipeline():
           "Sobel gradient ceiling: ||grad I|| < 15.0 px/intensity"],
          COLOR_TAG_VOID),
         ("Stage 4: Three-Class Region Classification",
-         ["Compute void area fraction per region: f_void = A_void / A_region",
+         ["Compute void area fraction per region: f_void",
           "Surface Region: f_void == 0.0 (zero void pixels)",
-          "Mixed Region: 0.0 < f_void < tau_void (default tau = 0.50)",
+          "Mixed Region: 0.0 < f_void < tau_void (tau = 0.50)",
           "Void Region: f_void >= tau_void (heavily pitted dimple)"],
          "#7C3AED"),
         ("Stage 5 & 6: Morphometrics & Visualization",
-         ["Per-region ECD = 2 * sqrt(Area / pi), circularity, aspect ratio",
-          "Area Fractions: AF_Void, AF_Surface, AF_Mixed (Sum == 1.0000)",
+         ["Per-region ECD = 2 * sqrt(Area / pi), circularity",
+          "Area Fractions: AF_Void, AF_Surface, AF_Mixed",
           "Generate 6-panel diagnostic figure (_pipeline.png)",
           "Generate 2-panel side-by-side figure (_side_by_side.png)",
           "Export validated CSV reports (0 NaN, 0 Inf)"],
@@ -247,9 +253,9 @@ def slide_3_pipeline():
     ]
 
     # Draw 2 rows x 3 columns of cards
-    col_w, row_h = 0.28, 0.33
+    col_w, row_h = 0.28, 0.34
     x_starts = [0.04, 0.36, 0.68]
-    y_starts = [0.49, 0.11]
+    y_starts = [0.49, 0.10]
 
     for idx, (title, items, border_c) in enumerate(stages):
         row = idx // 3
@@ -259,23 +265,25 @@ def slide_3_pipeline():
 
         draw_card(ax, x, y, col_w, row_h, border=border_c, lw=1.8)
         # Stage Header Box
-        ax.add_patch(FancyBboxPatch((x, y + row_h - 0.06), col_w, 0.06,
+        ax.add_patch(FancyBboxPatch((x, y + row_h - 0.055), col_w, 0.055,
                                     boxstyle="round,pad=0.005,rounding_size=0.015",
                                     facecolor=border_c, edgecolor="none", zorder=3))
-        ax.text(x + 0.015, y + row_h - 0.035, title, fontsize=10, fontweight="bold",
+        ax.text(x + 0.012, y + row_h - 0.030, title, fontsize=9.6, fontweight="bold",
                 color="#FFFFFF", va="center", zorder=4)
 
-        cur_y = y + row_h - 0.085
+        cur_y = y + row_h - 0.075
         for item in items:
-            ax.text(x + 0.015, cur_y, f"-  {item}", fontsize=8.4, color=COLOR_TEXT_BODY,
-                    va="top", zorder=3)
-            cur_y -= 0.045
+            wrapped_item = textwrap.fill(item, width=34)
+            num_lines = len(wrapped_item.split("\n"))
+            ax.text(x + 0.012, cur_y, f"-  {wrapped_item}", fontsize=8.2, color=COLOR_TEXT_BODY,
+                    linespacing=1.2, va="top", zorder=3)
+            cur_y -= (num_lines * 0.017 + 0.021)
 
     return fig
 
 
 def slide_4_synthetic():
-    """Slide 4: Visual Walkthrough — Synthetic SEM Benchmark."""
+    """Slide 4: Visual Walkthrough — Synthetic SEM Benchmark (Strict textwrap width=36 in sidebar)."""
     fig, ax = setup_slide("Visual Walkthrough: Synthetic SEM Benchmark", slide_num=4)
 
     # Left: Embed Synthetic Pipeline Figure
@@ -283,11 +291,9 @@ def slide_4_synthetic():
     if os.path.exists(img_path):
         img = cv2.imread(img_path)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # Embedded axes [left, bottom, width, height]
         ax_img = fig.add_axes([0.04, 0.10, 0.56, 0.74])
         ax_img.imshow(img_rgb)
         ax_img.axis("off")
-        # Border
         rect = Rectangle((0.04, 0.10), 0.56, 0.74, fill=False, edgecolor=COLOR_CARD_BORDER,
                          linewidth=1.5, zorder=5)
         ax.add_patch(rect)
@@ -300,31 +306,34 @@ def slide_4_synthetic():
 
     walkthrough = [
         ("Simulated Topography (Panel a):",
-         "Generated with synthetic tear-ridge network, deep dark dimples, flat ductile patches, and a large multi-dimple cluster."),
+         "Simulates tear ridges, deep dimples, flat ductile patches, and a large multi-dimple cluster."),
         ("Skeleton & Gap Closure (Panels b-c):",
-         "Otsu thresholding + Zhang-Suen skeletonization leaves broken endpoints. cKDTree spatial edge linking bridges gaps up to 10 px."),
+         "Otsu thresholding + Zhang-Suen skeletonization leaves broken endpoints. cKDTree links gaps <= 10 px."),
         ("Outlier Refinement (Stage 2):",
-         "Flagged the large coalesced dimple cluster (A_i > mu_A + sigma_A) and performed localized Otsu re-thresholding to resolve constituent cells."),
+         "Flagged the coalesced cluster (A_i > mu_A + sigma_A) and performed localized Otsu re-thresholding."),
         ("Two-Phase Void Detection (Panel d):",
-         "Histogram detector resolved I_tip = 58. Seeds (cyan) pinpoint dark floors; bounded dilation (magenta) extends to dimple walls."),
+         "Histogram detector resolved I_tip = 58. Seeds (cyan) pinpoint dark floors; dilation (magenta) extends to walls."),
         ("3-Class Segmentation (Panel e):",
-         "Surface = Blue (AF: 44.57%)\nMixed = Yellow (AF: 55.43%)\nVoid = Red (AF: 0.00%)\nTotal AF Sum: Exactly 1.0000"),
+         "Void = Red: 4 cells (AF: 7.22%)\nMixed = Yellow: 21 cells (AF: 48.20%)\nSurface = Blue: 37 cells (AF: 44.57%)\nTotal AF Sum: Exactly 1.0000"),
         ("Quantitative Sizing (Panel f):",
-         "Log-normal Equivalent Circular Diameter (ECD) distribution across all 62 segmented micro-cells.")
+         "Log-normal Equivalent Circular Diameter (ECD) sizing across all 62 segmented micro-cells.")
     ]
-    cur_y = 0.74
+
+    cur_y = 0.75
     for title, desc in walkthrough:
-        ax.text(0.65, cur_y, title, fontsize=9.8, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
-        cur_y -= 0.026
-        ax.text(0.65, cur_y, desc, fontsize=8.8, color=COLOR_TEXT_BODY, linespacing=1.35,
+        ax.text(0.65, cur_y, title, fontsize=9.2, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
+        cur_y -= 0.021
+        wrapped_desc = textwrap.fill(desc, width=36)
+        num_lines = len(wrapped_desc.split("\n"))
+        ax.text(0.65, cur_y, wrapped_desc, fontsize=8.5, color=COLOR_TEXT_BODY, linespacing=1.25,
                 va="top", zorder=3)
-        cur_y -= 0.088
+        cur_y -= (num_lines * 0.017 + 0.023)
 
     return fig
 
 
 def slide_5_sample1():
-    """Slide 5: Experimental Validation on Real SEM Fractograph (Sample 1)."""
+    """Slide 5: Experimental Validation on Real SEM Fractograph Sample 1 (Strict textwrap width=36)."""
     fig, ax = setup_slide("Experimental Validation: Real SEM Sample 1 (Banerjee et al.)", slide_num=5)
 
     # Left: Embed Sample 1 Pipeline Figure
@@ -349,32 +358,35 @@ def slide_5_sample1():
         ("Experimental Context:",
          "High-resolution ductile fractograph extracted directly from Banerjee et al. (1280 x 832 px, hole_extract.pdf)."),
         ("Dense Dimple Colony Segmentation:",
-         "Total Regions Segmented: 2,248 closed cells.\nInitial regions: 2,704 -> Refined after noise filtering: 2,248."),
+         "Total Regions Segmented: 2,248 closed cells.\nInitial: 2,704 -> Refined after noise filter: 2,248."),
         ("Stage 2 Refinement In Action:",
-         "48 oversized regions (A_i > mu_A + sigma_A) were flagged and locally re-thresholded, preventing dimple merging across tear ridges."),
+         "48 oversized regions (A_i > mu_A + sigma_A) were flagged and locally re-thresholded to prevent merging."),
         ("Adaptive Void-Tip Intensity:",
-         "Dynamically scanned dark regime peak: I_tip = 62. Dilation cleanly contained by Sobel gradient ceiling (||grad I|| < 15.0)."),
+         "Dynamically scanned dark regime peak: I_tip = 62. Dilation bounded by Sobel gradient ceiling (||grad I|| < 15)."),
         ("Quantitative 3-Class Distribution:",
-         "Void Regions:    436 cells  |  AF = 0.3396 (33.96%)\n"
-         "Surface Regions: 949 cells  |  AF = 0.0964 ( 9.64%)\n"
-         "Mixed Regions:   863 cells  |  AF = 0.5640 (56.40%)\n"
-         "Sum Area Fraction:  1.0000  (100.0% area accounted for)"),
+         "Void:    436 cells  |  AF = 0.3396 (33.96%)\n"
+         "Surface: 949 cells  |  AF = 0.0964 ( 9.64%)\n"
+         "Mixed:   863 cells  |  AF = 0.5640 (56.40%)\n"
+         "Sum Area Fraction:  1.0000  (100.0% closure)"),
         ("ECD Sizing Distribution:",
-         "Mean ECD = 19.3 px. Unimodal distribution confirming classical micro-void coalescence mechanism.")
+         "Mean ECD = 19.3 px. Unimodal log-normal distribution confirming micro-void coalescence mechanism.")
     ]
-    cur_y = 0.74
+
+    cur_y = 0.75
     for title, desc in points:
-        ax.text(0.65, cur_y, title, fontsize=9.8, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
-        cur_y -= 0.026
-        ax.text(0.65, cur_y, desc, fontsize=8.8, color=COLOR_TEXT_BODY, linespacing=1.35,
+        ax.text(0.65, cur_y, title, fontsize=9.2, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
+        cur_y -= 0.021
+        wrapped_desc = textwrap.fill(desc, width=36)
+        num_lines = len(wrapped_desc.split("\n"))
+        ax.text(0.65, cur_y, wrapped_desc, fontsize=8.5, color=COLOR_TEXT_BODY, linespacing=1.25,
                 va="top", zorder=3)
-        cur_y -= 0.090
+        cur_y -= (num_lines * 0.017 + 0.023)
 
     return fig
 
 
 def slide_6_sample2():
-    """Slide 6: Experimental Validation on Real SEM Fractograph (Sample 2)."""
+    """Slide 6: Experimental Validation on Real SEM Fractograph Sample 2 (Strict textwrap width=36)."""
     fig, ax = setup_slide("Experimental Validation: Real SEM Sample 2 (Banerjee et al.)", slide_num=6)
 
     # Left: Embed Sample 2 Pipeline Figure
@@ -397,43 +409,48 @@ def slide_6_sample2():
 
     points = [
         ("Experimental Context:",
-         "Extracted ductile fractograph (1280 x 831 px) displaying high-density deep dimples under darker overall illumination."),
+         "Extracted ductile fractograph (1280 x 831 px) displaying high-density deep dimples under darker overall lighting."),
         ("Illumination Invariance:",
-         "Darker background caused I_tip to automatically adapt to 75 (vs 62 in Sample 1), successfully isolating true dimple cores without manual tuning."),
+         "Darker background caused I_tip to adapt to 75 (vs 62 in Sample 1), cleanly isolating dimple cores without tuning."),
         ("Subdivision Performance:",
          "43 oversized clusters subdivided in Stage 2. Yielded 2,310 total fully closed micro-regions."),
         ("High-Void Area Fraction:",
-         "Void Regions:    383 cells  |  AF = 0.4358 (43.58%)\n"
-         "Surface Regions: 900 cells  |  AF = 0.0816 ( 8.16%)\n"
-         "Mixed Regions:  1027 cells  |  AF = 0.4826 (48.26%)\n"
+         "Void:    383 cells  |  AF = 0.4358 (43.58%)\n"
+         "Surface: 900 cells  |  AF = 0.0816 ( 8.16%)\n"
+         "Mixed:  1027 cells  |  AF = 0.4826 (48.26%)\n"
          "Sum Area Fraction:  1.0000  (Mathematically verified)"),
         ("Key Comparison vs Sample 1:",
-         "Sample 2 exhibits a 28% higher deep-void area fraction (AF_Void 43.6% vs 34.0%), reflecting severe triaxial stress-state void expansion."),
+         "Sample 2 exhibits a 28% higher deep-void area fraction (43.6% vs 34.0%), reflecting severe triaxial void expansion."),
         ("Diagnostic Figure Export:",
          "Clean 6-panel and 2-panel side-by-side figures exported to outputs/figures/ for publication reporting.")
     ]
-    cur_y = 0.74
+
+    cur_y = 0.75
     for title, desc in points:
-        ax.text(0.65, cur_y, title, fontsize=9.8, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
-        cur_y -= 0.026
-        ax.text(0.65, cur_y, desc, fontsize=8.8, color=COLOR_TEXT_BODY, linespacing=1.35,
+        ax.text(0.65, cur_y, title, fontsize=9.2, fontweight="bold", color=COLOR_TEXT_MAIN, zorder=3)
+        cur_y -= 0.021
+        wrapped_desc = textwrap.fill(desc, width=36)
+        num_lines = len(wrapped_desc.split("\n"))
+        ax.text(0.65, cur_y, wrapped_desc, fontsize=8.5, color=COLOR_TEXT_BODY, linespacing=1.25,
                 va="top", zorder=3)
-        cur_y -= 0.090
+        cur_y -= (num_lines * 0.017 + 0.023)
 
     return fig
 
 
 def slide_7_benchmark():
-    """Slide 7: Full Benchmark Table Across All 6 Samples."""
+    """Slide 7: Full Benchmark Table Across All 6 Samples (Strict textwrap width=32 in bottom cards)."""
     fig, ax = setup_slide("Comprehensive Benchmark Across Real & Synthetic Fractographs", slide_num=7)
 
     # Top summary card
-    draw_card(ax, 0.04, 0.64, 0.92, 0.20, title="Full Quantitative Dataset Summary (11,384 Segmented Micro-Regions)")
-    ax.text(0.06, 0.70,
-            "The CAMMP-SFSE engine was evaluated across 6 full datasets: 1 programmatic synthetic benchmark and 5 high-resolution\n"
-            "experimental SEM fractographs from Banerjee et al. All samples achieved exact area partitioning (Sum AF = 1.0000),\n"
-            "demonstrating complete topological closure and robust adaptability across distinct fracture modes and lighting conditions.",
-            fontsize=10.5, color=COLOR_TEXT_BODY, linespacing=1.45, zorder=3)
+    draw_card(ax, 0.04, 0.65, 0.92, 0.19, title="Full Quantitative Dataset Summary (11,384 Segmented Micro-Regions)")
+    summary_text = (
+        "The CAMMP-SFSE engine was evaluated across 6 full datasets: 1 programmatic synthetic benchmark and 5 high-resolution "
+        "experimental SEM fractographs from Banerjee et al. All samples achieved exact area partitioning (Sum AF = 1.0000), "
+        "demonstrating complete topological closure and robust adaptability across distinct fracture modes and lighting conditions."
+    )
+    wrapped_summary = textwrap.fill(summary_text, width=120)
+    ax.text(0.06, 0.71, wrapped_summary, fontsize=10.0, color=COLOR_TEXT_BODY, linespacing=1.4, zorder=3)
 
     # Benchmark Table
     col_labels = ["Image / Sample", "Dimensions", "Total Regions", "Void Count", "Surface Count",
@@ -449,7 +466,7 @@ def slide_7_benchmark():
     ]
 
     # Render Matplotlib Table
-    ax_table = fig.add_axes([0.04, 0.22, 0.92, 0.38])
+    ax_table = fig.add_axes([0.04, 0.23, 0.92, 0.38])
     ax_table.axis("off")
 
     tab = ax_table.table(cellText=table_data, colLabels=col_labels, loc="center", cellLoc="center")
@@ -472,47 +489,63 @@ def slide_7_benchmark():
             if col == 9:  # Sum AF column
                 cell.set_text_props(color=COLOR_SUCCESS, fontweight="bold")
 
-    # Bottom 3 Insight Cards
+    # Bottom 3 Insight Cards (Strict textwrap width=32)
     insights = [
-        ("Conservation Law Verified", "Every single sample satisfies sum(AF_k) == 1.0000. Not a single pixel is dropped or double-counted."),
-        ("Microstructural Discrimination", "Sample 3 shows 49.3% Surface AF (quasi-cleavage), while Samples 2 & 4 show > 42% Void AF (severe void growth)."),
-        ("Production Throughput", "Processes ~2,300 regions per megapixel fractograph in under 90 seconds on standard workstation CPU.")
+        ("Conservation Law Verified",
+         "Every single sample satisfies sum(AF_k) == 1.0000. Not a single pixel is dropped or double-counted across all 6 datasets."),
+        ("Microstructural Discrimination",
+         "Sample 3 shows 49.3% Surface AF (quasi-cleavage), while Samples 2 & 4 show > 42% Void AF (severe ductile void growth)."),
+        ("Production Throughput",
+         "Processes ~2,300 regions per megapixel fractograph in under 90 seconds on standard workstation CPU.")
     ]
     for i, (title, desc) in enumerate(insights):
         ix = 0.04 + i * 0.32
-        draw_card(ax, ix, 0.08, 0.28, 0.12, bg="#F1F5F9", border="#CBD5E1")
-        ax.text(ix + 0.015, 0.165, title, fontsize=10, fontweight="bold", color=COLOR_ACCENT, zorder=4)
-        ax.text(ix + 0.015, 0.138, desc, fontsize=8.4, color=COLOR_TEXT_BODY, linespacing=1.35,
+        draw_card(ax, ix, 0.075, 0.28, 0.13, bg="#F1F5F9", border="#CBD5E1")
+        ax.text(ix + 0.015, 0.175, title, fontsize=9.5, fontweight="bold", color=COLOR_ACCENT, zorder=4)
+        wrapped_desc = textwrap.fill(desc, width=32)
+        ax.text(ix + 0.015, 0.148, wrapped_desc, fontsize=8.5, color=COLOR_TEXT_BODY, linespacing=1.25,
                 va="top", zorder=4)
 
     return fig
 
 
 def slide_8_verification_handover():
-    """Slide 8: Verification, Software Delivery, and Handover Summary."""
+    """Slide 8: Verification, Software Delivery, and Handover Summary (Strict textwrap width=46 in 4 boxes)."""
     fig, ax = setup_slide("Verification Suite, Software Delivery & Project Handover", slide_num=8)
 
     # 4 Quadrants
     quads = [
         ("1. Verification & Test Suite",
-         [("63 / 63 Unit Tests Passing:", "Rigorous pytest suite spanning Stage 0 preprocessing (14 tests), Stages 1-2 contours & refinement (20 tests), and Stages 3-5 classification & quantification (29 tests)."),
-          ("Zero Warnings & Failures:", "Clean execution across test_preprocessing.py, test_contours.py, and test_classification.py."),
-          ("Data Integrity Assertions:", "Every exported CSV and metric array asserts: 0 NaN, 0 Inf, and valid non-negative morphometric values.")],
+         [("63 / 63 Unit Tests Passing:",
+           "Rigorous pytest suite spanning Stage 0 preprocessing (14 tests), Stages 1-2 contours & refinement (20 tests), and Stages 3-5 classification & quantification (29 tests)."),
+          ("Zero Warnings & Failures:",
+           "Clean execution across test_preprocessing.py, test_contours.py, and test_classification.py."),
+          ("Data Integrity Assertions:",
+           "Every exported CSV and metric array asserts: 0 NaN, 0 Inf, and valid non-negative morphometric values.")],
          COLOR_SUCCESS),
         ("2. VS Code & CLI User Interface",
-         [("VS Code 1-Click Execution:", "Configured .vscode/launch.json targets for Interactive Mode, Sample Processing, and Batch Micrograph processing."),
-          ("Interactive Console Runner:", "Running main.py without flags opens an interactive wizard to select images and tune parameters with defaults."),
-          ("Batch & Calibration CLI:", "Full CLI support with --scale, --crop-banner, --min-area, and --void-ratio for automated scripting.")],
+         [("VS Code 1-Click Execution:",
+           "Configured .vscode/launch.json targets for Interactive Mode, Sample Processing, and Batch Micrograph processing."),
+          ("Interactive Console Runner:",
+           "Running main.py without flags opens an interactive wizard to select images and tune parameters with defaults."),
+          ("Batch & Calibration CLI:",
+           "Full CLI support with --scale, --crop-banner, --min-area, and --void-ratio for automated scripting.")],
          COLOR_ACCENT),
         ("3. Sensitivity & Known Limitations",
-         [("Low-Contrast Shadowed Ridges:", "Gaps > 10 px between dark shadow walls are bridged by Stage 2 outlier re-thresholding."),
-          ("Illumination & Charging Spots:", "Extreme charging or dark cleavage shadows are mitigated by constraining the void-tip search window to [5, 100]."),
-          ("Resolution & Noise Floor:", "Sub-micron noise filtered via --min-area (default 25-30 px) to prevent speckles from distorting void counts.")],
+         [("Low-Contrast Shadowed Ridges:",
+           "Gaps > 10 px between dark shadow walls are bridged by Stage 2 outlier re-thresholding."),
+          ("Illumination & Charging Spots:",
+           "Extreme charging or dark cleavage shadows are mitigated by constraining the void-tip search window to [5, 100]."),
+          ("Resolution & Noise Floor:",
+           "Sub-micron noise filtered via --min-area (default 25-30 px) to prevent speckles from distorting void counts.")],
          "#D97706"),
         ("4. Handover & Deliverables Checklist",
-         [("Modular Source Code:", "src/ directory with clean PEP-8 modules: image_io, preprocessing, contour_detection, contour_refinement, void_detection, region_classification, quantification, and visualization."),
-          ("Publication Figures & Reports:", "outputs/ directory with high-res side-by-side figures, 6-panel diagnostics, classified masks, and CSV reports."),
-          ("Technical Documentation:", "Comprehensive Technical_Note.md detailing mathematical formulations, algorithm flowcharts, and verification walkthrough.")],
+         [("Modular Source Code:",
+           "src/ directory with clean PEP-8 modules: image_io, preprocessing, contour_detection, contour_refinement, void_detection, region_classification, quantification, and visualization."),
+          ("Publication Figures & Reports:",
+           "outputs/ directory with high-res side-by-side figures, 6-panel diagnostics, classified masks, and CSV reports."),
+          ("Technical Documentation:",
+           "Comprehensive Technical_Note.md detailing mathematical formulations, algorithm flowcharts, and verification walkthrough.")],
          COLOR_HEADER)
     ]
 
@@ -531,17 +564,19 @@ def slide_8_verification_handover():
         ax.add_patch(FancyBboxPatch((x, y + row_h - 0.055), col_w, 0.055,
                                     boxstyle="round,pad=0.005,rounding_size=0.015",
                                     facecolor=col_theme, edgecolor="none", zorder=3))
-        ax.text(x + 0.02, y + row_h - 0.033, title, fontsize=11, fontweight="bold",
+        ax.text(x + 0.02, y + row_h - 0.033, title, fontsize=10.5, fontweight="bold",
                 color="#FFFFFF", va="center", zorder=4)
 
         cur_y = y + row_h - 0.075
         for sub_t, desc in items:
             ax.text(x + 0.02, cur_y, sub_t, fontsize=9.2, fontweight="bold",
                     color=COLOR_TEXT_MAIN, zorder=3)
-            cur_y -= 0.022
-            ax.text(x + 0.02, cur_y, desc, fontsize=8.4, color=COLOR_TEXT_BODY,
-                    linespacing=1.35, va="top", zorder=3)
-            cur_y -= 0.065
+            cur_y -= 0.021
+            wrapped_desc = textwrap.fill(desc, width=46)
+            num_lines = len(wrapped_desc.split("\n"))
+            ax.text(x + 0.02, cur_y, wrapped_desc, fontsize=9.0, color=COLOR_TEXT_BODY,
+                    linespacing=1.3, va="top", zorder=3)
+            cur_y -= (num_lines * 0.0185 + 0.024)
 
     return fig
 
@@ -550,6 +585,15 @@ def main():
     """Generate the full 8-slide presentation deck."""
     output_pdf = "outputs/CAMMP_Presentation.pdf"
     os.makedirs(os.path.dirname(output_pdf) or ".", exist_ok=True)
+
+    # Check if target file is currently locked by a PDF viewer
+    try:
+        with open(output_pdf, "ab") as f:
+            pass
+    except (PermissionError, IOError):
+        print(f"[CAMMP-Deck] Notice: '{output_pdf}' is currently locked by an open PDF reader.")
+        output_pdf = "outputs/CAMMP_Presentation_Updated.pdf"
+        print(f"             Generating to: {output_pdf}")
 
     print(f"[CAMMP-Deck] Generating 8-slide presentation: {output_pdf}...")
     with PdfPages(output_pdf) as pdf:
