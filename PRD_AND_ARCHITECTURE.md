@@ -1,4 +1,4 @@
-﻿# Product Requirements Document (PRD) & System Architecture
+# Product Requirements Document (PRD) & System Architecture
 
 **Project Title:** Automated Segmentation of SEM Fractographs into Void and Surface Regions  
 **System Code:** CAMMP-SFSE (SEM Fractograph Segmentation Engine)  
@@ -32,13 +32,16 @@ sem-fractograph-segmentation/
 ├── README.md                    # Setup instructions, CLI usage, and methodology notes
 ├── requirements.txt             # Python package dependencies
 ├── main.py                      # Command-line interface (CLI) entry point
+├── scripts/
+│   └── extract_paper_images.py  # PDF image extractor for experimental micrographs
 ├── data/
 │   ├── raw/                     # Input SEM fractograph images (.tif, .png, .jpg)
 │   └── sample/                  # Cropped or synthetic test images for quick validation
 ├── outputs/
-│   ├── figures/                 # Step-by-step stage plots & color-coded overlays
-│   ├── masks/                   # Binary contour masks and classified region masks
-│   └── reports/                 # CSV files (region-level metrics & summary stats)
+│   ├── contours/                # Contour overlays (initial and refined skeletons)
+│   ├── figures/                 # Diagnostic multi-panel publication plots
+│   ├── masks/                   # Binary void masks and color-coded classified region masks
+│   └── measurements/            # CSV files (region-level metrics & summary stats)
 ├── src/
 │   ├── __init__.py
 │   ├── image_io.py              # Image loading, grayscale conversion, metadata/scale handling
@@ -46,7 +49,7 @@ sem-fractograph-segmentation/
 │   ├── contour_detection.py     # Global thresholding, skeletonization, edge linking, pruning
 │   ├── contour_refinement.py    # Area statistics, outlier detection, local re-thresholding
 │   ├── void_detection.py        # Stage A (void-tip peak detection) & Stage B (void extension)
-│   ├── classification.py        # 3-class assignment (Surface, Void, Mixed)
+│   ├── region_classification.py # 3-class assignment (Surface, Void, Mixed)
 │   ├── quantification.py        # Morphometric metrics (ECD, aspect ratio, circularity, area fraction)
 │   └── visualization.py         # Multi-panel diagnostic plots & color-coded region maps
 └── tests/
@@ -87,7 +90,7 @@ sem-fractograph-segmentation/
   * Iteratively grow void-tip seed regions outward into neighboring pixels inside the same closed contour region if their local intensity gradient is gentle and remains below the upper void cutoff (I_ext).
   * Distinguish between **deep voids** (originating from dark void-tip seeds) and **shallow voids** (local intensity depressions that do not reach I_tip).
 
-### Stage 4: Region Classification (`src/classification.py`)
+### Stage 4: Region Classification (`src/region_classification.py`)
 For each refined closed region R_i, compute the fraction of pixels covered by extended voids (f_void) and assign one of three classes:
 1. **Surface Region:** Contains zero void pixels (f_void = 0).
 2. **Void Region:** Predominantly composed of deep extended void pixels (f_void >= tau_void, where tau_void is the void dominance threshold, e.g., 0.50-0.70).
@@ -105,9 +108,11 @@ For each refined closed region R_i, compute the fraction of pixels covered by ex
   * **Aspect Ratio (AR):** Ratio of major axis length to minor axis length from fitted ellipse.
   * **Circularity (C):** (4 * pi * A) / (P^2)
 * **Outputs:**
-  * `outputs/reports/<image_name>_regions.csv`: Per-region measurements and class labels.
-  * `outputs/reports/<image_name>_summary.csv`: Global summary statistics.
+  * `outputs/measurements/<image_name>_regions.csv`: Per-region measurements and class labels.
+  * `outputs/measurements/<image_name>_summary.csv`: Global summary statistics.
   * `outputs/figures/<image_name>_pipeline.png`: 6-panel figure showing (1) Original SEM, (2) Initial Skeleton, (3) Refined Skeleton, (4) Void Tips & Extension, (5) Classified Regions (Void = Red, Mixed = Yellow/Green, Surface = Blue), and (6) ECD Size Distribution Histogram.
+  * `outputs/contours/<image_name>_skeleton.png`: Skeleton contour overlays.
+  * `outputs/masks/<image_name>_classified.png` & `_void_mask.png`: Binary and classified masks.
 
 ---
 

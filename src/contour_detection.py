@@ -104,31 +104,30 @@ def link_endpoints(skeleton: np.ndarray, max_gap: int = 10) -> np.ndarray:
     if len(endpoints) < 2:
         return result
     
-    eps = np.array(endpoints, dtype=np.float64)
-    linked = set()
+    from scipy.spatial import cKDTree
     
-    for i, (r1, c1) in enumerate(endpoints):
-        if i in linked:
+    eps = np.array(endpoints, dtype=np.float64)
+    tree = cKDTree(eps)
+    pairs = tree.query_pairs(r=max_gap, output_type="ndarray")
+    
+    if len(pairs) == 0:
+        return result
+        
+    # Sort pairs by distance so closest endpoints are linked first
+    diffs = eps[pairs[:, 0]] - eps[pairs[:, 1]]
+    dists = np.sqrt(np.sum(diffs**2, axis=1))
+    sorted_indices = np.argsort(dists)
+    
+    linked = set()
+    for idx in sorted_indices:
+        i, j = pairs[idx]
+        if i in linked or j in linked:
             continue
-        
-        # Find nearest unlinked endpoint
-        best_j = -1
-        best_dist = max_gap + 1
-        
-        for j in range(i + 1, len(endpoints)):
-            if j in linked:
-                continue
-            r2, c2 = endpoints[j]
-            dist = np.sqrt((r1 - r2)**2 + (c1 - c2)**2)
-            if dist < best_dist:
-                best_dist = dist
-                best_j = j
-        
-        if best_j >= 0 and best_dist <= max_gap:
-            r2, c2 = endpoints[best_j]
-            cv2.line(result, (c1, r1), (c2, r2), 255, 1)
-            linked.add(i)
-            linked.add(best_j)
+        r1, c1 = endpoints[i]
+        r2, c2 = endpoints[j]
+        cv2.line(result, (int(c1), int(r1)), (int(c2), int(r2)), 255, 1)
+        linked.add(i)
+        linked.add(j)
     
     return result
 

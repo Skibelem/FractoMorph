@@ -210,19 +210,21 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     from src.contour_detection import detect_contours
     from src.contour_refinement import refine_contours
     from src.void_detection import detect_voids
-    from src.classification import classify_all_regions, create_classification_mask
+    from src.region_classification import classify_all_regions, create_classification_mask
     from src.quantification import (compute_region_morphometrics,
                                      compute_summary_metrics, export_csv)
     from src.visualization import (create_pipeline_figure,
                                     save_classification_mask,
-                                    save_skeleton_overlay)
+                                    save_skeleton_overlay,
+                                    save_binary_mask)
 
     image_name = Path(input_path).stem
-    fig_dir = os.path.join(output_dir, "figures")
+    contour_dir = os.path.join(output_dir, "contours")
     mask_dir = os.path.join(output_dir, "masks")
-    report_dir = os.path.join(output_dir, "reports")
+    fig_dir = os.path.join(output_dir, "figures")
+    meas_dir = os.path.join(output_dir, "measurements")
 
-    for d in [fig_dir, mask_dir, report_dir]:
+    for d in [contour_dir, mask_dir, fig_dir, meas_dir]:
         os.makedirs(d, exist_ok=True)
 
     print(f"\n{'='*60}")
@@ -293,9 +295,9 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     image_area_px = int(np.sum(refined["label_map"] > 0))
     df_summary = compute_summary_metrics(df_regions, image_area_px, scale=scale)
 
-    # Export CSVs
-    regions_csv = os.path.join(report_dir, f"{image_name}_regions.csv")
-    summary_csv = os.path.join(report_dir, f"{image_name}_summary.csv")
+    # Export CSVs to outputs/measurements/
+    regions_csv = os.path.join(meas_dir, f"{image_name}_regions.csv")
+    summary_csv = os.path.join(meas_dir, f"{image_name}_summary.csv")
     export_csv(df_regions, regions_csv)
     export_csv(df_summary, summary_csv)
     print(f"  Regions CSV: {regions_csv}")
@@ -308,6 +310,7 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     # --- Stage 6: Visualization ---
     print("[Stage 6] Generating visualizations...")
 
+    # Diagnostic figures to outputs/figures/
     pipeline_fig = os.path.join(fig_dir, f"{image_name}_pipeline.png")
     create_pipeline_figure(
         gray, contours["skeleton_raw"], refined["skeleton"],
@@ -316,13 +319,23 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     )
     print(f"  Pipeline figure: {pipeline_fig}")
 
+    # Contours to outputs/contours/
+    init_contour_path = os.path.join(contour_dir, f"{image_name}_initial_contours.png")
+    save_skeleton_overlay(gray, contours["skeleton_raw"], init_contour_path)
+    print(f"  Initial contours: {init_contour_path}")
+
+    skel_path = os.path.join(contour_dir, f"{image_name}_skeleton.png")
+    save_skeleton_overlay(gray, refined["skeleton"], skel_path)
+    print(f"  Refined skeleton: {skel_path}")
+
+    # Masks to outputs/masks/
+    void_mask_path = os.path.join(mask_dir, f"{image_name}_void_mask.png")
+    save_binary_mask(voids["void_extended"], void_mask_path)
+    print(f"  Void mask: {void_mask_path}")
+
     mask_path = os.path.join(mask_dir, f"{image_name}_classified.png")
     save_classification_mask(class_mask, mask_path)
     print(f"  Classification mask: {mask_path}")
-
-    skel_path = os.path.join(mask_dir, f"{image_name}_skeleton.png")
-    save_skeleton_overlay(gray, refined["skeleton"], skel_path)
-    print(f"  Skeleton overlay: {skel_path}")
 
     # Print summary
     print(f"\n--- Summary for {image_name} ---")

@@ -1,12 +1,12 @@
 """
-Tests for src/classification.py, src/void_detection.py, and src/quantification.py
+Tests for src/region_classification.py, src/void_detection.py, and src/quantification.py
 """
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.classification import (
+from src.region_classification import (
     CLASS_SURFACE,
     CLASS_VOID,
     CLASS_MIXED,

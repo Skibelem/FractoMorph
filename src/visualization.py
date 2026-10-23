@@ -181,3 +181,25 @@ def save_skeleton_overlay(gray: np.ndarray, skeleton: np.ndarray,
     vis[skeleton > 0] = [0, 255, 0]
     cv2.imwrite(output_path, vis)
     return os.path.abspath(output_path)
+
+
+def save_binary_mask(mask: np.ndarray, output_path: str) -> str:
+    """Save a binary mask as a monochrome image (0 or 255).
+
+    Parameters
+    ----------
+    mask : np.ndarray
+        2D binary or boolean mask.
+    output_path : str
+        Output file path.
+
+    Returns
+    -------
+    str
+        Absolute path to the saved image.
+    """
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    out = (mask > 0).astype(np.uint8) * 255
+    cv2.imwrite(output_path, out)
+    return os.path.abspath(output_path)
+
