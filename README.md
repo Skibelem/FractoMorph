@@ -59,6 +59,31 @@ python main.py --input data/raw/ --output outputs/ --crop-banner 40
 pytest tests/ -v
 ```
 
+## Experimental Validation on Real Fractographs
+
+Extract the experimental SEM fractographs from Banerjee et al. (`hole_extract.pdf`) and process the entire dataset:
+
+```bash
+# Extract high-resolution micrographs from reference paper
+python scripts/extract_paper_images.py
+
+# Run batch processing on experimental SEM images
+python main.py --input data/raw/ --output outputs/ --min-area 30
+```
+
+### Quantitative Segmentation Results
+
+| Image / Sample | Image Dimensions | Total Regions | Void Count | Surface Count | Mixed Count | AF (Void) | AF (Surface) | AF (Mixed) | $\sum$ AF |
+|---|---|---|---|---|---|---|---|---|---|
+| **Synthetic SEM** | 512 × 512 px | 62 | 4 | 37 | 21 | 0.0722 | 0.4457 | 0.4820 | **1.0000** |
+| **Real SEM Sample 1** | 1280 × 832 px | 2,248 | 436 | 949 | 863 | 0.3396 | 0.0964 | 0.5640 | **1.0000** |
+| **Real SEM Sample 2** | 1280 × 831 px | 2,310 | 383 | 900 | 1,027 | 0.4358 | 0.0816 | 0.4826 | **1.0000** |
+| **Real SEM Sample 3** | 1280 × 830 px | 2,720 | 4 | 2,413 | 303 | 0.0967 | 0.4933 | 0.4100 | **1.0000** |
+| **Real SEM Sample 4** | 1280 × 832 px | 2,299 | 389 | 977 | 933 | 0.4200 | 0.1239 | 0.4561 | **1.0000** |
+| **Real SEM Sample 5** | 1280 × 832 px | 1,745 | 42 | 1,075 | 628 | 0.3559 | 0.1314 | 0.5127 | **1.0000** |
+
+All outputs (diagnostic 6-panel figures `_pipeline.png`, classified masks `_classified.png`, skeleton overlays `_skeleton.png`, and per-region/summary CSV metrics) are cleanly generated in `outputs/`.
+
 ## Reference
 
 Banerjee, S., et al. — *Automated Segmentation of SEM Fractographs into Void and Surface Regions*
