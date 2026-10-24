@@ -121,43 +121,42 @@ SEM_Fractograph_Segmentation/
 
 ### Stage 1: Contours & Edge Linking
 1. **Otsu Global Thresholding:**
-   $$\sigma_w^2(T) = \omega_0(T)\sigma_0^2(T) + \omega_1(T)\sigma_1^2(T)$$
+   - Minimizes within-class intensity variance across foreground ridges and background valleys: `σ_w²(T) = ω_0(T)·σ_0²(T) + ω_1(T)·σ_1²(T)`.
 2. **Skeletonization & Linking:**
-   - Zhang-Suen or Lee skeletonization reduces ridges to 1-pixel wide centerlines.
-   - Spatial endpoint linking via `scipy.spatial.cKDTree` finds all skeleton endpoints within radius $R = 10\text{ px}$ and connects mutual nearest neighbors using Bresenham lines.
-   - Spurious spurs with topological branch distance $< 5\text{ px}$ are pruned.
+   - Zhang-Suen or Lee skeletonization reduces ridges to 1-pixel-wide centerlines.
+   - Spatial endpoint linking via `scipy.spatial.cKDTree` finds all skeleton endpoints within radius `R = 10 px` and connects mutual nearest neighbors using Bresenham lines.
+   - Spurious spurs with topological branch distance `< 5 px` are pruned.
 
 ### Stage 2: Contour Refinement
-- Region areas $A_i$ are collected: mean $\mu_A$ and standard deviation $\sigma_A$ are calculated.
-- Outlier condition:
-  $$A_i > \mu_A + 1.0 \times \sigma_A$$
-- Flagged regions undergo localized Otsu thresholding within their bounding box. Resulting sub-skeletons are unioned back into the master skeleton.
-- Regions with area below `min_area` (default $25\text{ px}$) are merged to remove noise.
+- Region areas `A_i` are collected, and the mean (`μ_A`) and standard deviation (`σ_A`) are calculated.
+- **Outlier condition:** `A_i > μ_A + 1.0 × σ_A`
+- Flagged regions undergo localized Otsu thresholding within their bounding box. Resulting sub-skeletons are merged back into the master skeleton.
+- Regions with area below `min_area` (default `25 px`) are filtered out to remove speckle noise.
 
 ### Stage 3: Void Detection (Stages A & B)
 1. **Stage A (Void-Tip Peak):**
-   - The smoothed 256-bin histogram $H_{\text{smooth}}$ is scanned in the dark regime $I \in [5, 100]$ for the first local maximum:
-     $$I_{\text{tip}} = \arg\max_{I \in [5, 100]} H_{\text{smooth}}(I)$$
-   - Seed mask: $S(x, y) = 1$ if $I(x, y) \le I_{\text{tip}}$ and $(x, y) \notin \text{Skeleton}$.
+   - The smoothed 256-bin histogram `H_smooth` is scanned in the dark regime `I in [5, 100]` for the first local maximum:
+     - `I_tip = argmax H_smooth(I)` for `I in [5, 100]`
+   - **Seed mask:** `S(x, y) = 1` if `I(x, y) ≤ I_tip` and `(x, y)` is not on the skeleton boundary.
 2. **Stage B (Void Extension):**
    - Iterative dilation of seeds constrained by:
-     - Intensity ceiling: $I(x, y) \le \min(1.5 \times I_{\text{tip}}, 255)$
-     - Sobel gradient floor: $\|\nabla I(x, y)\| < 15.0$
-     - Boundary constraint: pixel must not cross the skeleton border.
+     - **Intensity ceiling:** `I(x, y) ≤ min(1.5 × I_tip, 255)`
+     - **Sobel gradient ceiling:** `||∇I(x, y)|| < 15.0`
+     - **Boundary constraint:** Pixel must not cross the closed skeleton border.
 3. **Region Void Fraction:**
-   $$f_{\text{void}, i} = \frac{\sum_{(x,y) \in R_i} V_{\text{ext}}(x,y)}{|R_i|}$$
+   - `f_void,i = (Void Pixels in Region i) / (Total Pixels in Region i)`
 
 ### Stage 4: Classification
-- **Surface:** $f_{\text{void}, i} = 0$
-- **Mixed:** $0 < f_{\text{void}, i} < \tau_{\text{void}}$ (default $\tau_{\text{void}} = 0.50$)
-- **Void:** $f_{\text{void}, i} \ge \tau_{\text{void}}$
+- **Surface:** `f_void,i = 0`
+- **Mixed:** `0 < f_void,i < τ_void` (default `τ_void = 0.50`)
+- **Void:** `f_void,i ≥ τ_void`
 
 ### Stage 5: Morphometrics & Area Fractions
-- Equivalent Circular Diameter: $\text{ECD}_i = 2 \sqrt{A_i / \pi}$
-- Circularity: $C_i = \frac{4 \pi A_i}{P_i^2}$
-- Area Fraction of class $k$:
-  $$\text{AF}_k = \frac{\sum_{i \in \text{Class}_k} A_i}{\sum_{\text{all regions } j} A_j}$$
-  $$\sum_k \text{AF}_k \equiv 1.0000$$
+- **Equivalent Circular Diameter (ECD):** `ECD_i = 2 × sqrt(A_i / π)`
+- **Circularity:** `C_i = (4 × π × A_i) / P_i²` (bounded to `[0, 1]`)
+- **Area Fraction of class `k`:**
+  - `AF_k = (Sum of A_i in Class k) / (Sum of A_j across all regions)`
+  - `AF_Void + AF_Surface + AF_Mixed = 1.0000`
 
 ---
 
@@ -166,7 +165,7 @@ SEM_Fractograph_Segmentation/
 The test suite consists of 63 unit tests across three modules:
 - `test_preprocessing.py`: 14 tests verifying grayscale conversion, 256-bin histograms, Gaussian smoothing, and bilateral filtering.
 - `test_contours.py`: 20 tests verifying Otsu thresholding, skeletonization, spatial KDTree linking, spur pruning, region area stats, and local re-thresholding.
-- `test_classification.py`: 29 tests verifying void tip peak detection, morphological extension, 3-class classification thresholds, morphometrics computation, and exact sum of area fractions.
+- `test_classification.py`: 29 tests verifying void-tip peak detection, morphological extension, 3-class classification thresholds, morphometrics computation, and exact sum of area fractions.
 
 ---
 
@@ -191,7 +190,7 @@ python main.py --input data/raw/ --output outputs/ --min-area 30
 
 ### Key Observations
 1. **Refinement in Action:** Across experimental images, 16 to 48 oversized regions per image were flagged and subdivided, preventing under-segmentation in dense dimple colonies.
-2. **Dynamic Cutoff:** $I_{\text{tip}}$ adapted accurately between samples (e.g., $I_{\text{tip}} = 32$ for high-brightness Sample 3 vs. $I_{\text{tip}} = 75\text{--}95$ for darker Samples 2 and 4).
+2. **Dynamic Cutoff:** `I_tip` adapted accurately between samples (e.g., `I_tip = 32` for high-brightness Sample 3 vs. `I_tip = 75–95` for darker Samples 2 and 4).
 3. **Partition Completeness:** In every sample, area fractions sum to exactly **1.0000** (100% partitioning).
 
 ---

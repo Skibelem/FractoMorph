@@ -72,9 +72,9 @@ python main.py --generate-sample
 | **Stage 0: Preprocessing** | Histogram smoothing (`sigma`) | `2.0` | 1D Gaussian smoothing of 256-bin intensity histogram |
 | **Stage 0: Preprocessing** | Bilateral filter (`d`, `sigmaColor`, `sigmaSpace`) | `5, 25, 25` | Denoises valley floors while preserving tear-ridge gradients |
 | **Stage 1: Contours** | Endpoint linking radius (`max_dist`) | `10 px` | Maximum gap bridged between skeleton endpoints via `cKDTree` |
-| **Stage 2: Refinement** | Outlier area threshold | `mu_A + 1.0 * sigma_A` | Flags abnormally large/under-segmented regions for local Otsu re-thresholding |
+| **Stage 2: Refinement** | Outlier area threshold | `μ_A + 1.0 × σ_A` | Flags abnormally large/under-segmented regions for local Otsu re-thresholding |
 | **Stage 3: Void Detection** | Dark regime search window | `I in [5, 100]` | Intensity range scanned for first local peak (`I_tip`) |
-| **Stage 3: Void Extension** | Extension cutoff (`I_ext`) | `min(1.5 * I_tip, 255)` | Upper intensity bound for Stage B dilation |
+| **Stage 3: Void Extension** | Extension cutoff (`I_ext`) | `min(1.5 × I_tip, 255)` | Upper intensity bound for Stage B dilation |
 | **Stage 3: Void Extension** | Sobel gradient ceiling | `15.0` | Prevents void extension from bleeding up steep dimple walls |
 
 ---
@@ -177,8 +177,8 @@ All outputs (side-by-side figures `_side_by_side.png`, diagnostic 6-panel figure
 
 ### Validation Observations & Known Limitations
 
-- **Effect of Stage 2 Refinement:** Across the 5 real SEM fractographs, 16 to 48 oversized regions ($A_i > \mu_A + \sigma_A$) per image were automatically flagged and subdivided via local Otsu re-thresholding, successfully resolving coalesced dimple clusters that global thresholding missed.
-- **Adaptive Void-Tip Thresholding:** The histogram peak detector dynamically adapts to global illumination shifts (e.g., $I_{\text{tip}} = 32$ on brighter Sample 3 versus $I_{\text{tip}} = 75\text{--}95$ on darker Samples 2 and 4).
+- **Effect of Stage 2 Refinement:** Across the 5 real SEM fractographs, 16 to 48 oversized regions (`A_i > μ_A + σ_A`) per image were automatically flagged and subdivided via local Otsu re-thresholding, successfully resolving coalesced dimple clusters that global thresholding missed.
+- **Adaptive Void-Tip Thresholding:** The histogram peak detector dynamically adapts to global illumination shifts (e.g., `I_tip = 32` on brighter Sample 3 versus `I_tip = 75–95` on darker Samples 2 and 4).
 - **Limitations & Sensitivity:**
   - **Low-Contrast Tear Ridges:** When tear ridges are heavily shadowed or blurred, skeleton gaps larger than `max_dist = 10 px` may remain unlinked, merging adjacent dimples until Stage 2 refinement catches them.
   - **Charging Artifacts & Deep Cleavage Shadows:** Extreme bright charging spots or deep topographic shadows in mixed brittle-ductile fracture can skew the dark-regime histogram tail; adjusting `--void-ratio` or pre-cropping scale banners (`--crop-banner`) mitigates this.
