@@ -13,23 +13,33 @@ from scipy import ndimage
 from skimage.morphology import skeletonize
 from skimage.filters import threshold_otsu
 
+from src.thresholding import apply_threshold
 
-def global_threshold(gray: np.ndarray) -> np.ndarray:
-    """Apply Otsu's global thresholding to separate ridges from valleys.
+
+def global_threshold(
+    gray: np.ndarray,
+    method: str = "otsu",
+    threshold_kwargs: dict | None = None,
+) -> np.ndarray:
+    """Apply global or adaptive thresholding to separate ridges from valleys.
     
     Parameters
     ----------
     gray : np.ndarray
         2D uint8 grayscale image.
+    method : str, default="otsu"
+        Thresholding method ("otsu", "yen", "triangle", "li", "adaptive", "gmm").
+    threshold_kwargs : dict or None, optional
+        Additional keyword arguments passed to the thresholding method.
     
     Returns
     -------
     np.ndarray
         Binary mask (uint8, 0 or 255). Bright ridges = 255.
     """
-    thresh_val = threshold_otsu(gray)
-    binary = (gray > thresh_val).astype(np.uint8) * 255
-    return binary
+    kwargs = threshold_kwargs or {}
+    result = apply_threshold(gray, method=method, **kwargs)
+    return result["binary"]
 
 
 def skeletonize_binary(binary: np.ndarray) -> np.ndarray:
@@ -214,8 +224,13 @@ def label_regions(skeleton: np.ndarray) -> tuple:
     return label_map, num_regions
 
 
-def detect_contours(gray: np.ndarray, max_gap: int = 10,
-                    max_spur_length: int = 8) -> dict:
+def detect_contours(
+    gray: np.ndarray,
+    max_gap: int = 10,
+    max_spur_length: int = 8,
+    threshold_method: str = "otsu",
+    threshold_kwargs: dict | None = None,
+) -> dict:
     """Run the full contour detection pipeline.
     
     Parameters
@@ -226,6 +241,10 @@ def detect_contours(gray: np.ndarray, max_gap: int = 10,
         Maximum endpoint gap to bridge.
     max_spur_length : int
         Maximum spur length to prune.
+    threshold_method : str, default="otsu"
+        Thresholding method ("otsu", "yen", "triangle", "li", "adaptive", "gmm").
+    threshold_kwargs : dict or None, optional
+        Additional keyword arguments for thresholding.
     
     Returns
     -------
@@ -237,7 +256,9 @@ def detect_contours(gray: np.ndarray, max_gap: int = 10,
         - 'label_map': Region label array
         - 'num_regions': Number of closed regions
     """
-    binary = global_threshold(gray)
+    binary = global_threshold(
+        gray, method=threshold_method, threshold_kwargs=threshold_kwargs
+    )
     skeleton_raw = skeletonize_binary(binary)
     skeleton_linked = link_endpoints(skeleton_raw, max_gap=max_gap)
     skeleton_pruned = prune_spurs(skeleton_linked, max_spur_length=max_spur_length)

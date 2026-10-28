@@ -186,7 +186,11 @@ def generate_synthetic_sem(output_path: str = "data/sample/synthetic_sem.png",
 
 def process_image(input_path: str, output_dir: str, scale: float = 1.0,
                   crop_banner_px: int = 0, min_area: int = 25,
-                  void_ratio: float = 0.50):
+                  void_ratio: float = 0.50,
+                  threshold_method: str = "otsu",
+                  adaptive_block_size: int = 35,
+                  adaptive_offset: float = -5.0,
+                  gmm_components: int = 2):
     """Run the full CAMMP-SFSE pipeline on a single SEM image.
 
     Parameters
@@ -203,6 +207,14 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
         Minimum region area in pixels.
     void_ratio : float
         Void fraction threshold for Void vs Mixed classification.
+    threshold_method : str, default="otsu"
+        Automated thresholding method ("otsu", "yen", "triangle", "li", "adaptive", "gmm").
+    adaptive_block_size : int, default=35
+        Block size for adaptive thresholding.
+    adaptive_offset : float, default=-5.0
+        Offset constant for adaptive thresholding.
+    gmm_components : int, default=2
+        Number of components for GMM thresholding.
     """
     from src.image_io import load_image, to_grayscale_uint8, crop_banner
     from src.preprocessing import preprocess
@@ -217,6 +229,15 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
                                     save_classification_mask,
                                     save_skeleton_overlay,
                                     save_binary_mask)
+
+    thresh_kwargs = {
+        "adaptive_block_size": adaptive_block_size,
+        "block_size": adaptive_block_size,
+        "adaptive_offset": adaptive_offset,
+        "offset": adaptive_offset,
+        "gmm_components": gmm_components,
+        "n_components": gmm_components,
+    }
 
     image_name = Path(input_path).stem
     contour_dir = os.path.join(output_dir, "contours")
@@ -246,8 +267,12 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     print(f"  Image size: {gray.shape[1]}x{gray.shape[0]} px")
 
     # --- Stage 1: Contour Detection ---
-    print("[Stage 1] Detecting region contours...")
-    contours = detect_contours(denoised)
+    print(f"[Stage 1] Detecting region contours (method: {threshold_method})...")
+    contours = detect_contours(
+        denoised,
+        threshold_method=threshold_method,
+        threshold_kwargs=thresh_kwargs,
+    )
     print(f"  Initial regions: {contours['num_regions']}")
 
     # --- Stage 2: Contour Refinement ---
@@ -255,7 +280,9 @@ def process_image(input_path: str, output_dir: str, scale: float = 1.0,
     refined = refine_contours(
         gray, contours["skeleton"],
         contours["label_map"], contours["num_regions"],
-        min_area=min_area
+        min_area=min_area,
+        threshold_method=threshold_method,
+        threshold_kwargs=thresh_kwargs,
     )
     print(f"  Refined regions: {refined['num_regions']}")
     print(f"  Oversized regions re-thresholded: {len(refined['oversized_labels'])}")
@@ -418,6 +445,24 @@ def interactive_mode():
         input_path = selected_target
 
     print("\n--- Pipeline Parameters (Press Enter to accept defaults) ---")
+    method_choices = ["otsu", "yen", "triangle", "li", "adaptive", "gmm"]
+    print("Available threshold methods: " + ", ".join(method_choices))
+    method_in = input("Threshold method [default otsu]: ").strip().lower()
+    threshold_method = method_in if method_in in method_choices else "otsu"
+
+    adaptive_block_size = 35
+    adaptive_offset = -5.0
+    gmm_components = 2
+
+    if threshold_method == "adaptive":
+        bs_in = input("Adaptive block size (odd integer >= 3) [default 35]: ").strip()
+        adaptive_block_size = int(bs_in) if bs_in else 35
+        off_in = input("Adaptive offset [default -5.0]: ").strip()
+        adaptive_offset = float(off_in) if off_in else -5.0
+    elif threshold_method == "gmm":
+        gmm_in = input("GMM components [default 2]: ").strip()
+        gmm_components = int(gmm_in) if gmm_in else 2
+
     scale_in = input("Spatial calibration scale in um/px [default 1.0]: ").strip()
     scale = float(scale_in) if scale_in else 1.0
 
@@ -445,6 +490,10 @@ def interactive_mode():
             crop_banner_px=crop_banner,
             min_area=min_area,
             void_ratio=void_ratio,
+            threshold_method=threshold_method,
+            adaptive_block_size=adaptive_block_size,
+            adaptive_offset=adaptive_offset,
+            gmm_components=gmm_components,
         )
 
     print("[CAMMP-SFSE] All processing complete!")
@@ -465,6 +514,8 @@ def main():
 Examples:
   python main.py --generate-sample
   python main.py --input data/sample/synthetic_sem.png --output outputs/
+  python main.py --input data/sample/synthetic_sem.png --threshold-method adaptive
+  python main.py --input data/sample/synthetic_sem.png --threshold-method gmm --gmm-components 2
   python main.py --input data/raw/sample_sem.tif --output outputs/ --scale 0.15
   python main.py --input data/raw/ --output outputs/ --crop-banner 40
         """,
@@ -493,6 +544,24 @@ Examples:
     parser.add_argument(
         "--void-ratio", type=float, default=0.50,
         help="Void fraction threshold for Void vs Mixed classification (default: 0.50)."
+    )
+    parser.add_argument(
+        "--threshold-method", type=str,
+        choices=["otsu", "yen", "triangle", "li", "adaptive", "gmm"],
+        default="otsu",
+        help="Automated thresholding method (default: otsu)."
+    )
+    parser.add_argument(
+        "--adaptive-block-size", type=int, default=35,
+        help="Neighborhood block size for adaptive thresholding (default: 35)."
+    )
+    parser.add_argument(
+        "--adaptive-offset", type=float, default=-5.0,
+        help="Offset constant for adaptive thresholding (default: -5.0)."
+    )
+    parser.add_argument(
+        "--gmm-components", type=int, default=2,
+        help="Number of Gaussian components for GMM thresholding (default: 2)."
     )
     parser.add_argument(
         "--generate-sample", action="store_true",
@@ -531,6 +600,10 @@ Examples:
             crop_banner_px=args.crop_banner,
             min_area=args.min_area,
             void_ratio=args.void_ratio,
+            threshold_method=args.threshold_method,
+            adaptive_block_size=args.adaptive_block_size,
+            adaptive_offset=args.adaptive_offset,
+            gmm_components=args.gmm_components,
         )
 
     print("[CAMMP-SFSE] All processing complete.")

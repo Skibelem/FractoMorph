@@ -13,6 +13,8 @@ from scipy import ndimage
 from skimage.morphology import skeletonize
 from skimage.filters import threshold_otsu
 
+from src.thresholding import apply_threshold
+
 
 def compute_area_stats(label_map: np.ndarray, num_regions: int) -> dict:
     """Compute area statistics for all labeled regions.
@@ -66,13 +68,18 @@ def find_oversized_regions(area_stats: dict) -> list:
     return oversized
 
 
-def local_rethreshold(gray: np.ndarray, label_map: np.ndarray,
-                      region_label: int) -> np.ndarray:
+def local_rethreshold(
+    gray: np.ndarray,
+    label_map: np.ndarray,
+    region_label: int,
+    threshold_method: str = "otsu",
+    threshold_kwargs: dict | None = None,
+) -> np.ndarray:
     """Apply local re-thresholding inside a single oversized region.
     
     Extract the local grayscale intensity distribution within the region
-    mask, compute a local Otsu threshold, and return a binary sub-skeleton
-    of internal boundaries.
+    mask, compute a local threshold using the specified method, and return
+    a binary sub-skeleton of internal boundaries.
     
     Parameters
     ----------
@@ -82,6 +89,10 @@ def local_rethreshold(gray: np.ndarray, label_map: np.ndarray,
         Region label map.
     region_label : int
         Label of the region to re-threshold.
+    threshold_method : str, default="otsu"
+        Thresholding method ("otsu", "yen", "triangle", "li", "adaptive", "gmm").
+    threshold_kwargs : dict or None, optional
+        Additional keyword arguments for thresholding.
     
     Returns
     -------
@@ -101,17 +112,32 @@ def local_rethreshold(gray: np.ndarray, label_map: np.ndarray,
     if np.std(local_pixels) < 5:
         return np.zeros_like(gray, dtype=np.uint8)
     
-    try:
-        local_thresh = threshold_otsu(local_pixels)
-    except ValueError:
-        return np.zeros_like(gray, dtype=np.uint8)
-    
-    # Create local binary inside the region mask
-    local_binary = np.zeros_like(gray, dtype=np.uint8)
-    region_coords = mask > 0
-    local_binary[region_coords] = (
-        (gray[region_coords] > local_thresh).astype(np.uint8) * 255
-    )
+    kwargs = threshold_kwargs or {}
+    norm_method = str(threshold_method).strip().lower()
+
+    if norm_method == "adaptive":
+        r_indices, c_indices = np.where(mask > 0)
+        rmin, rmax = int(r_indices.min()), int(r_indices.max()) + 1
+        cmin, cmax = int(c_indices.min()), int(c_indices.max()) + 1
+        crop_gray = gray[rmin:rmax, cmin:cmax]
+        crop_mask = mask[rmin:rmax, cmin:cmax]
+        res = apply_threshold(crop_gray, method="adaptive", **kwargs)
+        crop_binary = res["binary"]
+        local_binary = np.zeros_like(gray, dtype=np.uint8)
+        local_binary_crop = local_binary[rmin:rmax, cmin:cmax]
+        local_binary_crop[crop_mask > 0] = crop_binary[crop_mask > 0]
+    else:
+        try:
+            res = apply_threshold(local_pixels, method=norm_method, **kwargs)
+            local_thresh = res["threshold_summary"]
+        except Exception:
+            return np.zeros_like(gray, dtype=np.uint8)
+        
+        local_binary = np.zeros_like(gray, dtype=np.uint8)
+        region_coords = mask > 0
+        local_binary[region_coords] = (
+            (gray[region_coords] > local_thresh).astype(np.uint8) * 255
+        )
     
     # Skeletonize the local binary to get thin sub-contours
     if np.sum(local_binary > 0) < 5:
@@ -177,9 +203,15 @@ def filter_small_regions(label_map: np.ndarray, num_regions: int,
     return filtered, new_label
 
 
-def refine_contours(gray: np.ndarray, skeleton: np.ndarray,
-                    label_map: np.ndarray, num_regions: int,
-                    min_area: int = 25) -> dict:
+def refine_contours(
+    gray: np.ndarray,
+    skeleton: np.ndarray,
+    label_map: np.ndarray,
+    num_regions: int,
+    min_area: int = 25,
+    threshold_method: str = "otsu",
+    threshold_kwargs: dict | None = None,
+) -> dict:
     """Run the full contour refinement pipeline.
     
     Parameters
@@ -194,6 +226,10 @@ def refine_contours(gray: np.ndarray, skeleton: np.ndarray,
         Initial number of regions.
     min_area : int
         Minimum region area to keep.
+    threshold_method : str, default="otsu"
+        Thresholding method ("otsu", "yen", "triangle", "li", "adaptive", "gmm").
+    threshold_kwargs : dict or None, optional
+        Additional keyword arguments for thresholding.
     
     Returns
     -------
@@ -217,7 +253,13 @@ def refine_contours(gray: np.ndarray, skeleton: np.ndarray,
     # Local re-threshold each oversized region
     sub_skeletons = []
     for label in oversized:
-        sub_skel = local_rethreshold(gray, label_map, label)
+        sub_skel = local_rethreshold(
+            gray,
+            label_map,
+            label,
+            threshold_method=threshold_method,
+            threshold_kwargs=threshold_kwargs,
+        )
         if np.any(sub_skel > 0):
             sub_skeletons.append(sub_skel)
     
