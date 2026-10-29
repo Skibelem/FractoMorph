@@ -31,9 +31,11 @@ def compute_area_stats(label_map: np.ndarray, num_regions: int) -> dict:
     dict
         Keys: 'areas' (dict label->area), 'mean', 'std'
     """
-    areas = {}
-    for label in range(1, num_regions + 1):
-        areas[label] = int(np.sum(label_map == label))
+    if num_regions <= 0:
+        return {"areas": {}, "mean": 0.0, "std": 0.0}
+
+    counts = np.bincount(label_map.ravel(), minlength=num_regions + 1)
+    areas = {label: int(counts[label]) for label in range(1, num_regions + 1)}
     
     area_values = np.array(list(areas.values()), dtype=np.float64)
     
@@ -74,6 +76,7 @@ def local_rethreshold(
     region_label: int,
     threshold_method: str = "otsu",
     threshold_kwargs: dict | None = None,
+    bounding_slice: tuple | None = None,
 ) -> np.ndarray:
     """Apply local re-thresholding inside a single oversized region.
     
@@ -93,6 +96,8 @@ def local_rethreshold(
         Thresholding method ("otsu", "yen", "triangle", "li", "adaptive", "gmm").
     threshold_kwargs : dict or None, optional
         Additional keyword arguments for thresholding.
+    bounding_slice : tuple or None, optional
+        Precomputed bounding box slice for the region (improves efficiency).
     
     Returns
     -------
@@ -100,10 +105,19 @@ def local_rethreshold(
         Binary sub-contour mask (uint8, 0 or 255) for the region,
         same shape as gray.
     """
-    mask = (label_map == region_label).astype(np.uint8)
-    
-    # Extract local intensities
-    local_pixels = gray[mask > 0]
+    if bounding_slice is not None:
+        sl = bounding_slice
+    else:
+        r_indices, c_indices = np.where(label_map == region_label)
+        if len(r_indices) == 0:
+            return np.zeros_like(gray, dtype=np.uint8)
+        rmin, rmax = int(r_indices.min()), int(r_indices.max()) + 1
+        cmin, cmax = int(c_indices.min()), int(c_indices.max()) + 1
+        sl = (slice(rmin, rmax), slice(cmin, cmax))
+
+    crop_gray = gray[sl]
+    crop_mask = (label_map[sl] == region_label)
+    local_pixels = crop_gray[crop_mask]
     
     if len(local_pixels) < 10:
         return np.zeros_like(gray, dtype=np.uint8)
@@ -114,36 +128,26 @@ def local_rethreshold(
     
     kwargs = threshold_kwargs or {}
     norm_method = str(threshold_method).strip().lower()
+    crop_binary = np.zeros(crop_gray.shape, dtype=bool)
 
     if norm_method == "adaptive":
-        r_indices, c_indices = np.where(mask > 0)
-        rmin, rmax = int(r_indices.min()), int(r_indices.max()) + 1
-        cmin, cmax = int(c_indices.min()), int(c_indices.max()) + 1
-        crop_gray = gray[rmin:rmax, cmin:cmax]
-        crop_mask = mask[rmin:rmax, cmin:cmax]
         res = apply_threshold(crop_gray, method="adaptive", **kwargs)
-        crop_binary = res["binary"]
-        local_binary = np.zeros_like(gray, dtype=np.uint8)
-        local_binary_crop = local_binary[rmin:rmax, cmin:cmax]
-        local_binary_crop[crop_mask > 0] = crop_binary[crop_mask > 0]
+        crop_binary[crop_mask] = (res["binary"][crop_mask] > 0)
     else:
         try:
             res = apply_threshold(local_pixels, method=norm_method, **kwargs)
             local_thresh = res["threshold_summary"]
+            crop_binary[crop_mask] = (crop_gray[crop_mask] > local_thresh)
         except Exception:
             return np.zeros_like(gray, dtype=np.uint8)
-        
-        local_binary = np.zeros_like(gray, dtype=np.uint8)
-        region_coords = mask > 0
-        local_binary[region_coords] = (
-            (gray[region_coords] > local_thresh).astype(np.uint8) * 255
-        )
     
     # Skeletonize the local binary to get thin sub-contours
-    if np.sum(local_binary > 0) < 5:
+    if np.sum(crop_binary) < 5:
         return np.zeros_like(gray, dtype=np.uint8)
     
-    local_skel = skeletonize(local_binary > 0).astype(np.uint8) * 255
+    crop_skel = skeletonize(crop_binary).astype(np.uint8) * 255
+    local_skel = np.zeros_like(gray, dtype=np.uint8)
+    local_skel[sl] = crop_skel
     
     return local_skel
 
@@ -190,15 +194,18 @@ def filter_small_regions(label_map: np.ndarray, num_regions: int,
     tuple of (np.ndarray, int)
         Filtered label map (re-labeled sequentially) and new region count.
     """
-    filtered = np.zeros_like(label_map)
-    new_label = 0
-    
-    for label in range(1, num_regions + 1):
-        region_mask = (label_map == label)
-        area = np.sum(region_mask)
-        if area >= min_area:
-            new_label += 1
-            filtered[region_mask] = new_label
+    if num_regions <= 0:
+        return np.zeros_like(label_map), 0
+
+    counts = np.bincount(label_map.ravel(), minlength=num_regions + 1)
+    valid_labels = [label for label in range(1, num_regions + 1) if counts[label] >= min_area]
+    new_label = len(valid_labels)
+    if new_label == 0:
+        return np.zeros_like(label_map), 0
+
+    lut = np.zeros(len(counts), dtype=label_map.dtype)
+    lut[valid_labels] = np.arange(1, new_label + 1, dtype=label_map.dtype)
+    filtered = lut[label_map]
     
     return filtered, new_label
 
@@ -250,26 +257,31 @@ def refine_contours(
     # Find oversized regions
     oversized = find_oversized_regions(area_stats)
     
-    # Local re-threshold each oversized region
-    sub_skeletons = []
+    # Precompute bounding slices for all regions in single C pass
+    slices = ndimage.find_objects(label_map)
+    refined_skeleton = skeleton.copy()
+    has_subcontours = False
+
+    # Local re-threshold each oversized region and merge directly into master skeleton
     for label in oversized:
+        sl = slices[label - 1] if (label - 1 < len(slices)) else None
+        if sl is None:
+            continue
         sub_skel = local_rethreshold(
             gray,
             label_map,
             label,
             threshold_method=threshold_method,
             threshold_kwargs=threshold_kwargs,
+            bounding_slice=sl,
         )
         if np.any(sub_skel > 0):
-            sub_skeletons.append(sub_skel)
+            refined_skeleton = np.maximum(refined_skeleton, sub_skel)
+            has_subcontours = True
     
-    # Merge sub-contours into master skeleton
-    if sub_skeletons:
-        refined_skeleton = merge_subcontours(skeleton, sub_skeletons)
-        # Re-prune to remove new spurs
+    # Re-prune to remove new spurs if any subcontours were merged
+    if has_subcontours:
         refined_skeleton = prune_spurs(refined_skeleton, max_spur_length=5)
-    else:
-        refined_skeleton = skeleton.copy()
     
     # Re-label regions
     new_label_map, new_num = label_regions(refined_skeleton)

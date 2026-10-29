@@ -187,19 +187,20 @@ def compute_void_fractions(extended_voids: np.ndarray,
     dict
         Mapping from region label to void fraction (0.0-1.0).
     """
-    fractions = {}
-    void_bool = extended_voids > 0
+    if num_regions <= 0:
+        return {}
+
+    total_counts = np.bincount(label_map.ravel(), minlength=num_regions + 1)
+    void_mask = extended_voids > 0
+    void_counts = np.bincount(label_map[void_mask].ravel(), minlength=num_regions + 1)
     
+    fractions = {}
     for label in range(1, num_regions + 1):
-        region_mask = label_map == label
-        region_area = np.sum(region_mask)
-        
-        if region_area == 0:
+        tot = total_counts[label]
+        if tot == 0:
             fractions[label] = 0.0
-            continue
-        
-        void_area = np.sum(region_mask & void_bool)
-        fractions[label] = float(void_area) / float(region_area)
+        else:
+            fractions[label] = float(void_counts[label]) / float(tot)
     
     return fractions
 
